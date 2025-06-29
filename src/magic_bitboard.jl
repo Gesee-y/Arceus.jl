@@ -50,14 +50,24 @@ function Base.iterate(X::maskedBitsIterator, state=0)
 end
 
 
-function use_magic_bitboard(arr::AbstractVector, mask::UInt64, magic::UInt64, shift::Integer, query::UInt64)
-    return @inbounds arr[get_lookup_index(mask, magic, shift, query)]
+function use_magic_bitboard(board::MagicBitboard, query::Integer)
+    return @inbounds board.array[get_lookup_index(board, query)]
 end
 
+"""
+    function get_lookup_index(board:: MagicBitboard, query::UInt64)
+
+Given a bitboard, this can be used to lookup for the specific data requested.
+"""
 function get_lookup_index(board:: MagicBitboard, query::UInt64)
     return (((query&board.mask)*board.magic)>>board.shift)+1
 end
 
+"""
+    struct DONTCARE 
+
+Some place holder struct to indicate that an element of the bitboard is irrelevant for us.
+"""
 struct DONTCARE end;
 
 
