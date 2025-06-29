@@ -1,49 +1,62 @@
-abstract type TraitPool end
+########################################################### Trait Pool ######################################################
 
+"""
+    abstract type TraitPool
+
+Abstract type defining a trait pool (created via `@traitpool`)
+"""
+abstract type TraitPool end
 
 TRAIT_POOL_NAMES= Dict{String,Type{<:TraitPool}}()
 TRAIT_POOL_DESCRIPTORS = Dict{Type{<:TraitPool}, PoolDescriptor}()
 TRAIT_POOL_TYPES = Dict{Symbol, Type{<:TraitPool}}()
+
 getvalue(trait::TraitPool) = trait.value
 setvalue(trait::TraitPool, x::UInt64) = typeof(trait)(x)
-macro trait(x)
-    return :(error("Trait is not executable.")) 
+
+# Ensuring no one try these
+macro trait(x...)
+    return :(error("Trait is not executable outside of a @traitpool.")) 
 end
 
-macro trait(x,y)
-    return :(error("Trait is not executable."))  
+macro subpool(x...)
+    return :(error("Subpool is not executable outside of a @traitpool.")) 
 end
 
-macro subpool(x)
-    return :(error("Subpool is not executable.")) 
-end
-macro subpool(x,y)
-    return :(error("Subpool is not executable.")) 
+macro abstract_subpool(x...)
+    return :(error("Abstract subpool is not executable outside of a @traitpool.")) 
 end
 
-macro abstract_subpool(x)
-    return :(error("Subpool is not executable.")) 
-end
+"""
+    @traitpool name begin
+       ...
+    end
 
-macro abstract_subpool(x,y)
-    return :(error("Subpool is not executable.")) 
-end
-#=
-macro traitpool(x)
-    trait_pool_name = gensym()
-    module_name = @__MODULE__
-    return esc(:(
-        struct $trait_pool_name<:($module_name).TraitPool
-            value::UInt64
-            $trait_pool_name() = new()
-            $trait_pool_name(x) = new(x)
-        end;
-        ($module_name).TRAIT_POOL_NAMES[$x] = $trait_pool_name #Todo... add module name.
-    ))
-end
-=#
+Define a new trait pool with the given name. In the begin block, you should define your traits and subpools
 
+## Example
 
+```julia
+
+@traitpool "ABCDEF" begin
+    @trait electro # Create a trait with a dynamic position
+    @trait flame
+    @trait laser 2 # Define a trait with a fixed position ( the 2nd bit)
+    @subpool roles begin # a new subpool with a dynamic position. This one will take 2 bits
+        @trait attacker
+        @trait support
+        
+    end
+    @subpool meta 16-32 begin # a new pool with a fixed size and position
+        @trait earlygame
+        @trait midgame
+        @trait lategame
+    end
+    @abstract_subpool reserve1 33-48 # Abstract pool with undefined traits, going from 33 to 48
+    @abstract_subpool reserve2 8 # this one just have a size of 8 bits, no fixed position
+end
+```
+"""
 macro traitpool(x,y)
     y = parse_traits(y)
     trait_pool_name = gensym()
@@ -61,33 +74,47 @@ macro traitpool(x,y)
     
 end
 
-#Export this.
+"""
+    @make_traitpool traitpool var
 
-#For example... this would be.
-#=
+Generate a new empty trait pool from `traitpool` and store it in `var`.
+
+    @make_traitpool traitpool var begin
+        ...
+    end
+
+This will generate a new trait pool from `traitpool` and assign it to `var` 
+which will contains the pool traits and subpools defined in the begin block
+
+## Example
+
+```julia
+
 @traitpool "ABCDEF" begin
     @trait electro
-    @trait flame
-    @trait laser 2
+    @trait flame #Defining trait without bits.
+    @trait laser 2 #Defining trait with a specified bit (from the right or least significant.)
     @subpool roles begin
         @trait attacker
         @trait support
         
     end
-    @subpool meta 16-32 begin
+    @subpool meta 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
         @trait earlygame
         @trait midgame
         @trait lategame
     end
-    @abstract_subpool reserve1 33-48
-    @abstract_subpool reserve2 8
+    @abstract_subpool reserve1 33-48 #Defining start and finish bits.
+    @abstract_subpool reserve2 8 #Defining the size, but not the sub_trait.
 end
-=#
 
-
-
-
-
+#This will register the variable at compile time and construct a trait pool at runtime.
+@make_traitpool "ABCDEF" Pokemon begin
+    @trait electro #Creating trait pool with the following traits.
+    @trait flame
+end
+```
+"""
 macro make_traitpool(traitpool, variable)
     var_quot = Meta.quot(variable)
     traitpool_struct = TRAIT_POOL_NAMES[traitpool]
@@ -95,7 +122,6 @@ macro make_traitpool(traitpool, variable)
     eval(:(($module_name).TRAIT_POOL_TYPES[$var_quot] = $traitpool_struct))
     return esc(:($variable = $traitpool_struct(0)))
 end
-
 macro make_traitpool(traitpool,variable,traits_set)
     ans = quote
         @make_traitpool $traitpool $variable
@@ -105,6 +131,12 @@ macro make_traitpool(traitpool,variable,traits_set)
     return esc(ans)
 end
 
+"""
+    @register_traitpool traitpool variable
+
+Register the `variable` to directly get it's `traitpool`.
+Deprecated in favour of `@register_variable`
+"""
 macro register_traitpool(traitpool, variable)
     var_quot = Meta.quot(variable)
     traitpool_struct = TRAIT_POOL_NAMES[traitpool]
@@ -113,6 +145,11 @@ macro register_traitpool(traitpool, variable)
     return
 end
 
+"""
+    @copy_traitpool var1 var2
+
+Copy the `var1`'s traits pool to the `var2` and register it
+"""
 macro copy_traitpool(variable1, variable2)
     module_name = @__MODULE__
     traitpool_struct = TRAIT_POOL_TYPES[variable1]
@@ -121,14 +158,4 @@ macro copy_traitpool(variable1, variable2)
     return esc(:($variable2 = $variable1))
 end
 
-
-
-
-
-
-
 #End of part 1... defining traits.
-
-
-
-
