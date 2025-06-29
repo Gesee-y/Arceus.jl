@@ -1,5 +1,19 @@
 using Random
 
+"""
+    struct MagicBitboard 
+        value::UInt
+        magic::UInt
+        shift::UInt
+
+This struct represents a magic bitboard, used to accelerate lookup for entities.
+"""
+struct MagicBitboard 
+    value::UInt
+    magic::UInt
+    shift::UInt
+end
+
 struct maskedBitsIterator
     mask::UInt64
     reverse_mask::UInt64
