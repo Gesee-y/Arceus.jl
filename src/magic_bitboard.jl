@@ -8,8 +8,9 @@ using Random
 
 This struct represents a magic bitboard, used to accelerate lookup for entities.
 """
-struct MagicBitboard 
-    value::UInt
+struct MagicBitboard{T}
+    array::Vector{T}
+    mask::UInt
     magic::UInt
     shift::UInt
 end
@@ -20,20 +21,41 @@ struct maskedBitsIterator
     maskedBitsIterator(mask::UInt64) = new(mask,~mask)
     maskedBitsIterator(mask) = maskedBitsIterator(UInt64(mask))
 end
+
+"""
+    iterate(X::maskedBitsIterator, state)
+
+Efficiently iterates over all 1-bits in a bitboard (`X.mask`) using advanced bitwise operations.
+
+# How it works:
+- `reverse_mask` is the bitwise complement of the mask: it has 1s where the mask has 0s.
+- On each iteration, we compute `ans = mask & ((state | reverse_mask) + 1)`, which directly gives the next 1-bit position in the mask, skipping all 0-bits.
+- The algorithm stops when all 1-bits have been visited.
+
+# Why does it work?
+- `state | reverse_mask` sets all forbidden bits (those not in the mask) to 1, as well as all bits already visited (`state`).
+- The increment (`+1`) operation automatically jumps to the next valid (1) bit in the mask.
+- The final `& mask` keeps only the allowed bits.
+
+# Example:
+If `mask = 0b101` (bits 0 and 2 are 1), the iteration will yield 0b001 (1), then 0b100 (4), and then stop.
+
+# Note:
+This technique is common in chess engines or board game programming, where you need to quickly iterate over valid positions. Proper documentation is crucial to avoid confusion due to the advanced bitwise logic used here!
+"""
 Base.iterate(::maskedBitsIterator) = UInt64(0),UInt64(0)
-
-function Base.iterate(X::maskedBitsIterator, state)
-    ans = X.mask&((state|X.reverse_mask)+1)
-
-    return ifelse(ans==0, nothing, (ans,ans))
+function Base.iterate(X::maskedBitsIterator, state=0)
+    ans = X.mask & ((state | X.reverse_mask) + 1)
+    return ifelse(ans == 0, nothing, (ans, ans))
 end
+
 
 function use_magic_bitboard(arr::AbstractVector, mask::UInt64, magic::UInt64, shift::Integer, query::UInt64)
     return @inbounds arr[get_lookup_index(mask, magic, shift, query)]
 end
 
-function get_lookup_index(mask::UInt64, magic::UInt64, shift::Integer, query::UInt64)
-    return (((query&mask)*magic)>>shift)+1
+function get_lookup_index(board:: MagicBitboard, query::UInt64)
+    return (((query&board.mask)*board.magic)>>board.shift)+1
 end
 
 struct DONTCARE end;
