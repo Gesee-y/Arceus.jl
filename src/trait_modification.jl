@@ -1,6 +1,13 @@
-
+###################################################### Trait modif ###################################################
 
 #To fix... get_trait_pool_descriptor for subpools too.
+
+"""
+    get_trait_pool_descriptor(variable)
+
+Return the pool descriptor of a given variable if it has been registered with `@register_traitpool`
+Else it will throw an error.
+"""
 function get_trait_pool_descriptor(variable)
     #error("Not fixed yet.")
     module_name = @__MODULE__
@@ -12,11 +19,16 @@ function get_trait_pool_descriptor(variable)
         sub_pool_type = module_name.SUB_POOL_TYPES[variable]
         trait_pool_descriptor = module_name.SUB_POOL_DESCRIPTORS[sub_pool_type]
     else
-        error("Cannot find pool descriptor.")
+        error("Cannot find pool descriptor $variable.")
     end
     return trait_pool_descriptor
 end
 
+"""
+    get_trait_pool_type(name)
+
+Get the type of a trait pool from it's `name`.
+"""
 function get_trait_pool_type(name)
     if (haskey(TRAIT_POOL_NAMES,name))
         return TRAIT_POOL_NAMES[name]
@@ -27,21 +39,20 @@ function get_trait_pool_type(name)
     end
 end
 
+# This will create the expressions chain on which we will iterate
 function parse_walk_chain(chain::Symbol)
     return [chain]
 end
-
 function parse_walk_chain(chain::Expr)
-    @assert chain.head == Symbol(".")
+    @assert chain.head == Symbol(".") "Invalid expresion $chain. Should have head '.'"
     return vcat(parse_walk_chain(chain.args[1]),parse_walk_chain(chain.args[2].value))
 end
 
+# This seems to return the a parsed walking chain and the size of a trait
 function parse_individual_trait_mod_arg(x)
-    @assert x.head == :macrocall && x.args[1] == Symbol("@trait")
+    @assert (x.head == :macrocall && x.args[1] == Symbol("@trait")) "Invalid argument $x"
     walking_chain = parse_walk_chain(x.args[2])
-    #if (length{x.args} >= 3)
     value = length(x.args) >= 3 ? x.args[3] : 1
-    #println(walking_chain)
     return (walking_chain,value)
 end
 
@@ -53,7 +64,7 @@ end
 
 function parse_traits_mod_args(args)
     remove_line_number_node!(args)
-    @assert args.head == :block
+    @assert args.head == :block "Invalid trait modification args. $args should be a block"
     result = [parse_individual_trait_mod_arg(i) for i in args.args]
     Ones = [i[1] for i in result if i[2] == 1]
     Zeros =  [i[1] for i in result if i[2] == 0]
@@ -71,85 +82,29 @@ function parse_traits_mod_args(args)
     return traitsArguments(Ones,Zeros,Depending)
 end
 
-#Fix this to handle abstract trait pools.
+# Process in a poolDescriptor and advance in a tree-way, going further at each walk
+# Fix this to handle abstract trait pools.
 function walk_trait_pool_descriptor(walk::Vector{Symbol}, trait_pool_descriptor::PoolDescriptor)
-    #this is a concrete function.
     for i in walk
-        trait_pool_descriptor = trait_pool_descriptor.args[i]
+        if hasproperty(trait_pool_descriptor, :args)
+            trait_pool_descriptor = trait_pool_descriptor.args[i]
+        else
+            error("Cannot walk trait path $walk: $i not found in $trait_pool_descriptor.")
+        end
     end
     return trait_pool_descriptor
 end
 
-
-
-macro settraits(variable,args)
-    trait_pool_descriptor = get_trait_pool_descriptor(variable)
-    parsed_args = parse_traits_mod_args(args)
-    static_one_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]
-    one_bits = reduce(Base.:|, UInt64(1).<<(static_one_bits.-1);init=0)
-    static_zero_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settozeros]
-    zero_bits = reduce(Base.:|, UInt64(1).<<(static_zero_bits.-1);init=0)
-    pullup_bits = :($one_bits)
-    for (dependent_var,dependent_value) in parsed_args.setdepending
-        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
-        current_bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
-        zero_bits |= current_bits #Bits set to zero will initially set things to zero.
-        pullup_bits = :($pullup_bits | ((getvalue($dependent_var))&($current_bits)))
+"""
+    @settrait var begin
+       ...
     end
-    base_bits = :(getvalue($variable)&~($zero_bits))
-    return esc(:($variable= setvalue($variable,($base_bits)|($pullup_bits))))
-    #println(parsed_args)
-    
-    #println(trait_pool_descriptor)
-end
 
-macro addtraits(variable,args)
-    trait_pool_descriptor = get_trait_pool_descriptor(variable)
-    parsed_args = parse_traits_mod_args(args)
-    static_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]
-    bits = reduce(Base.:|, UInt64(1).<<(static_bits.-1);init=0)
-    answer = :(getvalue($variable)|$bits)
-    for (dependent_var,dependent_value) in parsed_args.setdepending
-        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
-        bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
-        answer = :($answer | ((getvalue($dependent_var))&($bits)))
-    end
-    return esc(:($variable= setvalue($variable,$answer)))
-end
-
-macro removetraits(variable, args)
-    trait_pool_descriptor = get_trait_pool_descriptor(variable)
-    parsed_args = parse_traits_mod_args(args)
-    static_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]
-    bits = reduce(Base.:|, UInt64(1).<<(static_bits.-1);init=0)
-    answer = :(getvalue($variable)&~($bits))
-    for (dependent_var,dependent_value) in parsed_args.setdepending
-        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
-        bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
-        answer = :($answer & ~((getvalue($dependent_var))&($bits)))
-    end
-    return esc(:($variable= setvalue($variable,$answer)))
-end
-
-macro fliptraits(variable,args)
-    trait_pool_descriptor = get_trait_pool_descriptor(variable)
-    parsed_args = parse_traits_mod_args(args)
-    static_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]
-    println(static_bits)
-    bits = reduce(Base.:|, UInt64(1).<<(static_bits.-1);init=0)
-    answer = :(getvalue($variable)⊻$bits)
-    for (dependent_var,dependent_value) in parsed_args.setdepending
-        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
-        bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
-        answer = :($answer | ((getvalue($dependent_var))⊻($bits)))
-    end
-    return esc(:($variable= setvalue($variable,$answer)))
-end
-
-
-
-
-#=
+This will set the given trait to the value given.
+`1` means activate
+`0` means deactivate
+A var name means "set this trait the same as this var"    
+```
 @traitpool "ABCDEF" begin
     @trait electro
     @trait flame
@@ -168,19 +123,88 @@ end
     @abstract_subpool reserve2 8
 end
 
-
-
 @make_traitpool "ABCDEF" Pokemon begin
     @trait electro
     @trait flame
 end
-#@make_traitpool "ABCDEF" X
+
 @copy_traitpool Pokemon X
+
 @settraits Pokemon begin
     @trait electro 
     @trait roles.attacker 1
     @trait roles.support X
     @trait meta.earlygame X
+end
+```
+"""
+macro settraits(variable,args)
+    
+    # First we get the pool descripto from the variable name
+    trait_pool_descriptor = get_trait_pool_descriptor(variable)
+
+    # And then we parse the arguments (mostly a set of traits)
+    parsed_args = parse_traits_mod_args(args)
+    
+    # We get all the traits needing to be set to 
+    static_one_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]
+    
+    # This will get us the mask of all the bits to set to one
+    one_bits = reduce(Base.:|, UInt64(1).<<(static_one_bits.-1);init=0)
+    static_zero_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settozeros]
+    
+    # This will get us the mask of all the bits to set to zero
+    zero_bits = reduce(Base.:|, UInt64(1).<<(static_zero_bits.-1);init=0)
+
+    # This contains the bits to set to one
+    pullup_bits = :($one_bits)
+
+    # We go through the depending var, getting the traits to add and to remove
+    for (dependent_var,dependent_value) in parsed_args.setdepending
+        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
+        current_bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
+        zero_bits |= current_bits #Bits set to zero will initially set things to zero.
+        pullup_bits = :($pullup_bits | ((getvalue($dependent_var))&($current_bits)))
+    end
+
+    # We first remove the bits with a simple AND and NOT
+    base_bits = :(getvalue($variable)&~($zero_bits))
+
+    # We finnaly combine the removed bits with the ones to add with a simple OR
+    return esc(:($variable= setvalue($variable,($base_bits)|($pullup_bits))))
+end
+
+"""
+    @addtraits var begin
+        ...
+    end
+
+This will activate the given traits of the an instance of a traitpool `var`
+
+## Example
+
+```julia
+@traitpool "ABCDEF" begin
+    @trait electro
+    @trait flame
+    @trait laser 2
+    @subpool roles begin
+        @trait attacker
+        @trait support
+        
+    end
+    @subpool meta 16-32 begin
+        @trait earlygame
+        @trait midgame
+        @trait lategame
+    end
+    @abstract_subpool reserve1 33-48
+    @abstract_subpool reserve2 8
+end
+
+@make_traitpool "ABCDEF" Pokemon begin
+    @trait electro
+    @trait flame
 end
 
 @addtraits Pokemon begin
@@ -188,33 +212,180 @@ end
     @trait electro
     @trait laser X
 end
-@removetraits X begin
-    @trait laser
+
+```
+"""
+macro addtraits(variable,args)
+
+    trait_pool_descriptor, parsed_args, static_bits, bits = _get_trait_modification_data(variable, args)
+    # We then just apply it with a OR to set these bits to one
+    answer = :(getvalue($variable)|$bits)
+
+    # We also set the bits of the dependent var to one
+    for (dependent_var,dependent_value) in parsed_args.setdepending
+        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
+        bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
+        answer = :($answer | ((getvalue($dependent_var))&($bits)))
+    end
+    return esc(:($variable= setvalue($variable,$answer)))
 end
 
-println(@macroexpand @settraits Pokemon begin
-    @trait meta.earlygame 1
-    @trait meta.midgame 0
-    @trait meta.lategame X
-    @trait laser X
+"""
+    @removetraits var begin
+        ...
+    end
 
-end)
+This will desactivate the given traits of the an instance of a traitpool `var`
 
-println(@macroexpand @addtraits Pokemon begin
+## Example
+
+```julia
+@traitpool "ABCDEF" begin
+    @trait electro
+    @trait flame
+    @trait laser 2
+    @subpool roles begin
+        @trait attacker
+        @trait support
+        
+    end
+    @subpool meta 16-32 begin
+        @trait earlygame
+        @trait midgame
+        @trait lategame
+    end
+    @abstract_subpool reserve1 33-48
+    @abstract_subpool reserve2 8
+end
+
+@make_traitpool "ABCDEF" Pokemon begin
+    @trait electro
+    @trait flame
+end
+
+@removetraits Pokemon begin
+    @trait flame
+end
+```
+"""
+macro removetraits(variable, args)
+
+    trait_pool_descriptor, parsed_args, static_bits, bits = _get_trait_modification_data(variable, args)    
+    # Then we just do a bitwise AND between the variable value and the NOT of our mask
+    answer = :(getvalue($variable)&~($bits))
+
+    # We then also remove the depending traits
+    for (dependent_var,dependent_value) in parsed_args.setdepending
+        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
+        bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
+        answer = :($answer & ~((getvalue($dependent_var))&($bits)))
+    end
+    return esc(:($variable= setvalue($variable,$answer)))
+end
+
+"""
+    @fliptraits var begin
+        ...
+    end
+
+This will invert the state of the given traits of the an instance of a traitpool `var`.
+activate become desactivate and deactivate become activate
+
+## Example
+
+```julia
+@traitpool "ABCDEF" begin
+    @trait electro
+    @trait flame
+    @trait laser 2
+    @subpool roles begin
+        @trait attacker
+        @trait support
+        
+    end
+    @subpool meta 16-32 begin
+        @trait earlygame
+        @trait midgame
+        @trait lategame
+    end
+    @abstract_subpool reserve1 33-48
+    @abstract_subpool reserve2 8
+end
+
+@make_traitpool "ABCDEF" Pokemon begin
+    @trait electro
+    @trait flame
+end
+
+@fliptraits Pokemon begin
     @trait meta.earlygame
     @trait electro
     @trait laser X
-end)
+end
+```
+"""
+macro fliptraits(variable,args)
 
-println(@macroexpand @removetraits Pokemon begin
-    @trait meta.earlygame
-    @trait electro
-    @trait laser X
-end)
-println(@macroexpand @fliptraits Pokemon begin
-    @trait meta.earlygame
-    @trait electro
-    @trait laser X
-end)
-#println("Finish.")
-=#
+    trait_pool_descriptor, parsed_args, static_bits, bits = _get_trait_modification_data(variable, args)
+    # We can then flip the current value of these bits with a bitwise XOR
+    answer = :(getvalue($variable)⊻$bits)
+
+    # And we do the same with the depending vars
+    for (dependent_var,dependent_value) in parsed_args.setdepending
+        dynamic_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in dependent_value]
+        bits = reduce(Base.:|, UInt64(1).<<(dynamic_bits.-1);init=0)
+        answer = :($answer | ((getvalue($dependent_var))⊻($bits)))
+    end
+    return esc(:($variable= setvalue($variable,$answer)))
+end
+
+
+function _get_trait_modification_data(variable, args)
+    # We get the pool descriptor for this variable
+    trait_pool_descriptor = get_trait_pool_descriptor(variable)
+
+    # Then we get a trait argument struct containing the bits to set to one
+    parsed_args = parse_traits_mod_args(args)
+
+    # We then get the position of each of the traits to set to one
+    static_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]
+
+    # We create a mask that will serve to activate these traits
+    bits = reduce(Base.:|, UInt64(1) .<< (static_bits .- 1);init=0)
+
+    return (trait_pool_descriptor, parsed_args, static_bits, bits)
+end
+
+"""
+    @printtraits var
+
+Prints the status of all the existing traits, whether they are activated or desactivated.
+"""
+macro printtraits(var)
+    value = getvalue(var)
+    descriptor = get_trait_pool_descriptor(var)
+    str = "Variable "*string(var)*" traits state:\n"
+    for (name, d) in collect(descriptor.args)
+        str*= _get_trait_activeness(value, name, d, 1)
+    end
+    
+    return :(println($str))
+end
+
+
+function _get_trait_activeness(var::Integer, name::Symbol, value::Integer, depth=0)
+    if var & (1 << (value - 1)) != 0
+        return string(name)*" is enabled"
+    else 
+        return string(name)*" is disabled"
+    end
+end
+
+function _get_trait_activeness(var::Integer, name::Symbol, value::PoolDescriptor, depth=1)
+    str = String(name)*"\n"
+    for (n, v) in collect(value.args)
+        string *= ("\t"^depth)*_get_trait_activeness(var, n, v, depth+1)*"\n"
+    end
+
+    return string
+end
