@@ -7,6 +7,14 @@ using Random
         shift::UInt
 
 This struct represents a magic bitboard, used to accelerate lookup for entities.
+
+## Constructor
+
+    MagicBitboard(mask::UInt64, f, return_type::Type = Any; 
+        shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
+
+This will construct a new magic bitboard and automatically fill it with the relevant data.
+see `find_magic_bitboard` for more informations
 """
 struct MagicBitboard{T}
     array::Vector{T}
@@ -14,7 +22,30 @@ struct MagicBitboard{T}
     magic::UInt
     shift::UInt
 end
+function MagicBitboard(mask::UInt64, f, return_type::Type = Any; 
+    shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
+    
+    magic, shift = find_magic_bitboard(mask, f, return_type;
+        shift_minimum=shift_minimum, guess_limits=guess_limits,rng=rng)
 
+    data = fill_magic_bitboard(mask, magic, f, return_type, shift)
+    MagicBitboard{return_type}(data, mask, magic, shift)
+end
+
+"""
+    struct maskedBitsIterator
+        mask::UInt64
+        reverse_mask::UInt64
+
+This struct serve as an iterator on a bit mask.
+At each state, it returns the next bit at 1.
+
+## Constructor
+
+    maskedBitsIterator(mask::UInt64)
+
+This will create a new iterator for the given `mask`
+"""
 struct maskedBitsIterator
     mask::UInt64
     reverse_mask::UInt64
@@ -49,7 +80,11 @@ function Base.iterate(X::maskedBitsIterator, state=0)
     return ifelse(ans == 0, nothing, (ans, ans))
 end
 
-
+"""
+    use_magic_bitboard(board::MagicBitboard, query::Integer)
+       
+This function will return an element of the magic bit board
+"""
 function use_magic_bitboard(board::MagicBitboard, query::Integer)
     return @inbounds board.array[get_lookup_index(board, query)]
 end
@@ -72,18 +107,27 @@ struct DONTCARE end;
 
 
 
-"
-returns the last number which needs to be checked.
+"""
+    magic_bitboard_range(mask)
+
+Returns the last number which needs to be checked.
 This loops from zero to that number. zero magic number, however, yields trivial result mapping all to the same value, and thus not need to be checked.
-"
-function magic_bitboard_range(mask)
+"""
+function magic_bitboard_range(mask::Integer)
     #The last bit represents its 
     Big_interval=Int128(2)^64
     
     return UInt64(div(Big_interval,(mask&-mask))-1)
 end
 
-function verify_magic_bitboard(answer_table,magic::UInt64, shift, return_type::Type)
+
+"""
+    verify_magic_bitboard(answer_table,magic::UInt64, shift, return_type::Type)
+
+This function verify the validity of magic bitboard.
+It ensure that each trait's combination redirect us efficiently to an unique index.
+"""
+function verify_magic_bitboard(answer_table,magic::UInt64, shift::Integer, return_type::Type)
     #println("Verifying magic", magic)
     A = Vector{Union{return_type, DONTCARE}}(undef, 1<<(64-shift))
     for i in eachindex(A)
@@ -100,35 +144,61 @@ function verify_magic_bitboard(answer_table,magic::UInt64, shift, return_type::T
     return true
 end
 
+"""
+    find_magic_bitboard(mask::UInt64, f, return_type::Type = Any;
+        shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
 
-function find_magic_bitboard(mask::UInt64, f, return_type::Type = Any; shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
-    answer_table = Dict{UInt64, return_type}()
+This function construct a magic bitboard with brute force.
+This will try as many possible number as defined by `guess_limits` for the current `shift`.
+If we find a magic number, before the current shift goes under the `shift_minimum`,
+we return the magic number and the shift, else it will throw an error.
+"""
+function find_magic_bitboard(mask::UInt64, f, return_type::Type = Any; 
+    shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
+
+    answer_dict = Dict{UInt64, return_type}()
     #We get a hash table but not a perfect one so we need to do it again.
+
+    # for each bits of the mask
     for i in maskedBitsIterator(mask)
+        # get the returned value for him
         Temp::Union{return_type, DONTCARE} = f(i)
+
+        # If the value is valid then we add it to our dictionnary
         if Temp !== DONTCARE()
-            answer_table[i] = Temp
+            answer_dict[i] = Temp
         end
     end
-    answer_table = collect(answer_table)
+
+    answer_table = collect(answer_dict)
     #Now, we need to find the perfect hash that solves this answer table.
     #Can change if needed.
+    
+    # Ok
+    # We need to find the perfect magic number and shift for our answer table
     initial_shift = shift = 48
     limit = guess_limits
     guess = UInt64(0)
     while !(verify_magic_bitboard(answer_table, guess, shift, return_type))
         guess = rand(rng,UInt64)&rand(rng,UInt64)&rand(rng,UInt64)
         limit -= 1
+
+        ## If we guessed so much that we reach a limit
         if (limit <= 0)
-            shift -= 1
-            if (shift < shift_minimum)
+            shift -= 1 # We modify the shift, which may increased necessary size
+            if (shift < shift_minimum) # But if we already hut the minimum, then we stop
                 error("Cannot find magic bitboard with sufficiently small size (indicated by shift_minimum).")
             end
             limit = guess_limits
         end
     end
+    
     answer_guess = guess
     answer_shift = shift
+
+    # This is triggered in the first run
+    # We will thing finding if there is a solution for our answertable
+    # with higher shift => a lower size
     if (shift == initial_shift)
         trying_to_shrink = true
         while trying_to_shrink
@@ -140,6 +210,10 @@ function find_magic_bitboard(mask::UInt64, f, return_type::Type = Any; shift_min
                 break
             end
             limit = guess_limits
+            
+            # So here we will try a different guess at each iterations
+            # if a given guess solve the answer table (genereate unique index for each trait combination)
+            # We won (and with a minimal size)
             while !(verify_magic_bitboard(answer_table, guess, shift, return_type))
                 guess = rand(rng,UInt64)&rand(rng,UInt64)&rand(rng,UInt64)
                 limit -= 1
@@ -155,6 +229,11 @@ function find_magic_bitboard(mask::UInt64, f, return_type::Type = Any; shift_min
     #You can construct later.
 end
 
+"""
+    fill_magic_bitboard(mask::UInt64,magic, f, return_type::Type, shift)
+
+This will fill a magic bitboard with the relevant data given by the function `f` for each trait.
+"""
 function fill_magic_bitboard(mask::UInt64,magic, f, return_type::Type, shift)
     A = Vector{return_type}(undef, 1<<(64-shift))
     answer_table = Dict{UInt64, return_type}()
@@ -168,4 +247,14 @@ function fill_magic_bitboard(mask::UInt64,magic, f, return_type::Type, shift)
     end
     
     return A
+end
+
+#################################################### LEGACY ######################################################
+
+function use_magic_bitboard(arr::AbstractVector, mask::UInt64, magic::UInt64, shift::Integer, query::UInt64)
+    return @inbounds arr[get_lookup_index(mask, magic, shift, query)]
+end
+
+function get_lookup_index(mask::UInt64, magic::UInt64, shift::Integer, query::UInt64)
+    return (((query&mask)*magic)>>shift)+1
 end
