@@ -1,6 +1,6 @@
 # Arceus.jl
 
-A fork of [AliceRoselia](https://github.com/AliceRoselia/Arceus.jl)'s *Arcane*, an entity management system based on magic bitboards.
+A fork of [AliceRoselia](https://github.com/AliceRoselia/Arceus.jl)'s *Arceus*, an entity management system based on magic bitboards.
 
 [Entity-Component-System (ECS)](https://en.wikipedia.org/wiki/Entity_component_system) is a well-established architecture for managing entities by decoupling **data** (components) from **behavior** (systems). However, traditional ECS approaches suffer from query-based bottlenecks—retrieving all entities with a specific set of components can become redundant and slow, especially as the number of possible component combinations grows.
 
