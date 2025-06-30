@@ -21,15 +21,23 @@ struct MagicBitboard{T}
     mask::UInt
     magic::UInt
     shift::UInt
-end
-function MagicBitboard(mask::UInt64, f, return_type::Type = Any; 
-    shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
-    
-    magic, shift = find_magic_bitboard(mask, f, return_type;
-        shift_minimum=shift_minimum, guess_limits=guess_limits,rng=rng)
 
-    data = fill_magic_bitboard(mask, magic, f, return_type, shift)
-    MagicBitboard{return_type}(data, mask, magic, shift)
+    ## Constructors
+
+    function MagicBitboard(mask::UInt64, f, return_type::Type = Any; 
+        shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
+        
+        magic, shift = find_magic_bitboard(mask, f, return_type;
+            shift_minimum=shift_minimum, guess_limits=guess_limits,rng=rng)
+
+        data = fill_magic_bitboard(mask, magic, f, return_type, shift)
+        new{return_type}(data, mask, magic, shift)
+    end
+
+    function MagicBitboard(mask::UInt64, magic, shift, f, return_type::Type = Any)
+        data = fill_magic_bitboard(mask, magic, f, return_type, shift)
+        new{return_type}(data, mask, magic, shift)
+    end
 end
 
 """
@@ -85,9 +93,12 @@ end
        
 This function will return an element of the magic bit board
 """
-function use_magic_bitboard(board::MagicBitboard, query::Integer)
-    return @inbounds board.array[get_lookup_index(board, query)]
+function use_magic_bitboard(board::MagicBitboard{T}, query::Integer) where T
+    A::Vector{T} = board.array
+    return @inbounds A[get_lookup_index(board, query)]
 end
+Base.getindex(board::MagicBitboard, query::Integer) = use_magic_bitboard(board, query)
+Base.getindex(board::MagicBitboard, trait::TraitPool) = use_magic_bitboard(board, getvalue(trait))
 
 """
     function get_lookup_index(board:: MagicBitboard, query::UInt64)
@@ -154,6 +165,12 @@ If we find a magic number, before the current shift goes under the `shift_minimu
 we return the magic number and the shift, else it will throw an error.
 """
 function find_magic_bitboard(mask::UInt64, f, return_type::Type = Any; 
+    shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
+    
+    return get_magic(mask, f, return_type;
+            shift_minimum=shift_minimum, guess_limits=guess_limits,rng=rng)
+end
+function _compute_magic_bitboard(mask::UInt64, f, return_type::Type = Any; 
     shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
 
     answer_dict = Dict{UInt64, return_type}()

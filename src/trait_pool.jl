@@ -1,15 +1,8 @@
 ########################################################### Trait Pool ######################################################
 
-"""
-    abstract type TraitPool
-
-Abstract type defining a trait pool (created via `@traitpool`)
-"""
-abstract type TraitPool end
-
-TRAIT_POOL_NAMES= Dict{String,Type{<:TraitPool}}()
-TRAIT_POOL_DESCRIPTORS = Dict{Type{<:TraitPool}, PoolDescriptor}()
-TRAIT_POOL_TYPES = Dict{Symbol, Type{<:TraitPool}}()
+const TRAIT_POOL_NAMES= Dict{String,Type{<:TraitPool}}()
+const TRAIT_POOL_DESCRIPTORS = Dict{Type{<:TraitPool}, PoolDescriptor}()
+const TRAIT_POOL_TYPES = Dict{Symbol, Type{<:TraitPool}}()
 
 getvalue(trait::TraitPool) = trait.value
 setvalue(trait::TraitPool, x::UInt64) = typeof(trait)(x)
@@ -159,3 +152,7 @@ macro copy_traitpool(variable1, variable2)
 end
 
 #End of part 1... defining traits.
+
+
+
+

@@ -1,3 +1,4 @@
+
 """
     @hastrait var.trait
 

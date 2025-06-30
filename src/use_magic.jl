@@ -16,9 +16,13 @@ end
 abstract type Lookup end
 
 #LOOK_UP_NAMES = Dict{String,Type{<:Lookup}}()
-LOOK_UP_TYPES = Dict{Symbol,magic_constructor}()
+const LOOK_UP_TYPES = Dict{Symbol,magic_constructor}()
 
+"""
+    replace_property!(a::Expr, i, j)
 
+This function replace all the occurence of i with j in the expression `a`
+"""
 function replace_property!(a::Expr, i, j)
     if (a.head == i)
         a.head = j
@@ -39,10 +43,10 @@ function add_mask_from_rule!(rule,arr)
     return
 end
 
-
+# This will add every occurence of @hastrait and usetrait in a array `arr`
 function add_mask_from_rule!(rule::Expr,arr)
+
     if rule.head == :macrocall && (rule.args[1] ==Symbol("@hastrait") || rule.args[1] == Symbol("usetrait"))
-        #println(rule|>dump)
         push!(arr,rule.args[2])
     end
     for i in rule.args
@@ -166,12 +170,9 @@ macro register_variable(variable)
     return esc(ans)
 end
 
-macro make_lookup(lookup, variable)
-    var_quot = Meta.quot(variable)
-    module_name = @__MODULE__
-    eval(:(($module_name).LOOK_UP_TYPES[$var_quot] = $lookup))
-    return esc(:($variable = fill_magic_bitboard(($lookup).mask,$lookup.magic,($lookup).func,Base.return_types(($lookup).func,(UInt64,))[1],($lookup).shift)))
-    #TODO... return something...
+macro make_lookup(lookup)
+    return :(MagicBitboard(($lookup).mask, $lookup.magic,($lookup).shift,($lookup).func, 
+        Base.return_types(($lookup).func,(UInt64,))[1]))
 end
 
 macro register_lookup(lookup,variable)

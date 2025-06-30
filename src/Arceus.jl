@@ -1,5 +1,14 @@
 
 module Arceus
+
+    """
+    abstract type TraitPool
+
+    Abstract type defining a trait pool (created via `@traitpool`)
+    """
+    abstract type TraitPool end
+
+    include("magic_cache.jl")
     include("magic_bitboard.jl")
     include("bits_allocation.jl") 
     include("trait_pool.jl") 
@@ -15,5 +24,6 @@ module Arceus
 
     export get_trait_pool_descriptor, get_trait_pool_type, getvalue, setvalue
     export find_magic_bitboard, verify_magic_bitboard, fill_magic_bitboard, magic_constructor
-    export setstate, getstate
+    export setstate, getstate, DONTCARE, maskedBitsIterator, use_magic_bitboard
+
 end
