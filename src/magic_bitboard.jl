@@ -21,22 +21,28 @@ struct MagicBitboard{T}
     mask::UInt
     magic::UInt
     shift::UInt
+    pext::Bool
 
     ## Constructors
 
-    function MagicBitboard(mask::UInt64, f, return_type::Type = Any; 
-        shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG())
+    function MagicBitboard(mask::UInt64, magic, shift, f, return_type::Type = Any; 
+        shift_minimum::Integer = 32, guess_limits::Integer=1000000, rng = Random.TaskLocalRNG(), PEXT=true)
         
-        magic, shift = find_magic_bitboard(mask, f, return_type;
-            shift_minimum=shift_minimum, guess_limits=guess_limits,rng=rng)
+        if PEXT
+            data = fill_magic_bitboard(mask, magic, f, return_type, shift)
+            new{return_type}(data, mask, magic, shift, true)
+        else
+            magic, shift = find_magic_bitboard(mask, f, return_type;
+                shift_minimum=shift_minimum, guess_limits=guess_limits,rng=rng)
 
-        data = fill_magic_bitboard(mask, magic, f, return_type, shift)
-        new{return_type}(data, mask, magic, shift)
+            data = fill_magic_bitboard(mask, magic, f, return_type, shift)
+            new{return_type}(data, mask, magic, shift, false)
+        end
     end
 
     function MagicBitboard(mask::UInt64, magic, shift, f, return_type::Type = Any)
-        data = fill_magic_bitboard(mask, magic, f, return_type, shift)
-        new{return_type}(data, mask, magic, shift)
+        data = fill_magic_bitboard(mask, magic, f, return_type, shift, false)
+        new{return_type}(data, mask, magic, shift, false)
     end
 end
 
@@ -93,12 +99,21 @@ end
        
 This function will return an element of the magic bit board
 """
-function use_magic_bitboard(board::MagicBitboard{T}, query::Integer) where T
+function use_magic_bitboard(cond::Bool,board::MagicBitboard{T}, query::Integer) where T
+    func = cond ? PEXT_FUNC : get_lookup_index
+    A::Vector{T} = board.array
+    return @inbounds A[func(board, query)]
+end
+function use_magic_bitboard(::Val{false},board::MagicBitboard{T}, query::Integer) where T
     A::Vector{T} = board.array
     return @inbounds A[get_lookup_index(board, query)]
 end
-Base.getindex(board::MagicBitboard, query::Integer) = use_magic_bitboard(board, query)
-Base.getindex(board::MagicBitboard, trait::TraitPool) = use_magic_bitboard(board, getvalue(trait))
+Base.getindex(board::MagicBitboard, query::Integer) = use_magic_bitboard(Val(board.pext),board, query)
+Base.getindex(board::MagicBitboard, trait::TraitPool) = use_magic_bitboard(board.pext,board, getvalue(trait))
+
+pext(board::MagicBitboard, query::Integer) = pext(convert(UInt,query), board.mask)
+pext(board::MagicBitboard, query::UInt) = pext(query, board.mask)
+fallback_pext(board::MagicBitboard, query::UInt) = fallback_pext(query, board.mask)
 
 """
     function get_lookup_index(board:: MagicBitboard, query::UInt64)
@@ -115,8 +130,6 @@ end
 Some place holder struct to indicate that an element of the bitboard is irrelevant for us.
 """
 struct DONTCARE end;
-
-
 
 """
     magic_bitboard_range(mask)
@@ -251,14 +264,14 @@ end
 
 This will fill a magic bitboard with the relevant data given by the function `f` for each trait.
 """
-function fill_magic_bitboard(mask::UInt64,magic, f, return_type::Type, shift)
+function fill_magic_bitboard(mask::UInt64,magic, f, return_type::Type, shift, PEXT=true)
     A = Vector{return_type}(undef, 1<<(64-shift))
     answer_table = Dict{UInt64, return_type}()
     for traits in maskedBitsIterator(mask)
         Temp::Union{return_type, DONTCARE} = f(traits)
         if Temp !== DONTCARE()
             ans = Temp
-            index = ((traits*magic)>>shift)
+            index = PEXT ? PEXT_FUNC(traits,mask)-1 : ((traits*magic)>>shift)
             A[begin+index] = ans
         end
     end

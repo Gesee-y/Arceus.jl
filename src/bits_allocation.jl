@@ -1,12 +1,4 @@
-
-const KEYWORDS = Dict{Symbol, Symbol}(
-    :position => :at,
-    :add => :+,
-    :remove => :-,
-    :dependance => :<=,
-    :to => :(=>),
-    :from => :from,
-)
+############################################################ Bits Alloc ################################################
 
 """
     mutable struct PoolDescriptor

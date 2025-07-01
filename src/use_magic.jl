@@ -3,6 +3,7 @@ struct magic_constructor{F<:Function}
     magic::UInt64
     shift::Int64
     func::F
+    pext::Bool
 
 end
 
@@ -81,22 +82,40 @@ macro lookup(var, parent_pool, rule)
     f2 = gensym()
     x = gensym()
     mask = get_mask_from_rule(deepcopy(rule),parent_pool,var) #TO BE COMPLETED.
-    magic = gensym()
-    shift = gensym()
     #Do something with this.
+    shift = 63 - count_ones(mask)
     parent_pool_type = get_trait_pool_type(parent_pool)
 
     get_f2 = :(const $f2 = $x -> $f1($parent_pool_type($x)))
-    get_mask_and_magic = :(($magic,$shift) = find_magic_bitboard($mask,$f2))
-    magic_constructor_instantiate = :(magic_constructor($mask,$magic,$shift,$f2))
-    #println(magic_constructor_instantiate)
+    magic_constructor_instantiate = :(magic_constructor($mask,UInt(0),$shift,$f2, true))
     return esc(:(const $f1 = @get_lookup_function $var $parent_pool $rule;
         $get_f2;
-        $get_mask_and_magic;
         $magic_constructor_instantiate
     ))
 end
+macro lookup(key,var, parent_pool, rule)
+    if key == KEYWORDS[:magic_mode]
+        f1 = gensym()
+        f2 = gensym()
+        x = gensym()
+        mask = get_mask_from_rule(deepcopy(rule),parent_pool,var) #TO BE COMPLETED.
+        magic = gensym()
+        shift = gensym()
+        #Do something with this.
+        parent_pool_type = get_trait_pool_type(parent_pool)
 
+        get_f2 = :(const $f2 = $x -> $f1($parent_pool_type($x)))
+        get_mask_and_magic = :(($magic,$shift) = find_magic_bitboard($mask,$f2))
+        
+        magic_constructor_instantiate = :(magic_constructor($mask,$magic,$shift,$f2, false))
+        #println(magic_constructor_instantiate)
+        return esc(:(const $f1 = @get_lookup_function $var $parent_pool $rule;
+            $get_f2;
+            $get_mask_and_magic;
+            $magic_constructor_instantiate
+        ))
+    end
+end
 
 macro get_lookup_function(var, parent_pool, rule)
     #Create a new struct type. 
@@ -152,7 +171,7 @@ end
 
 macro make_lookup(lookup)
     return :(MagicBitboard(($lookup).mask, $lookup.magic,($lookup).shift,($lookup).func, 
-        Base.return_types(($lookup).func,(UInt64,))[1]))
+        Base.return_types(($lookup).func,(UInt64,))[1]; PEXT=($lookup).pext))
 end
 
 macro register_lookup(lookup,variable)

@@ -55,7 +55,7 @@ function parse_individual_trait_mod_arg(x,::Val{true})
     to_walk = x.args[2]
     if length(x.args) > 2
         if x.args[3] == KEYWORDS[:dependance]
-            value = x_args[4]
+            value = x.args[4]
             to_walk = x.args[2]
         end
     end
@@ -75,7 +75,7 @@ function parse_individual_trait_mod_arg(x, ::Val{false})
         value = 0
     elseif length(x.args) > 2
         if x.args[3] == KEYWORDS[:dependance]
-            value = x_args[4]
+            value = x.args[4]
             to_walk = x.args[2]
         end
     else

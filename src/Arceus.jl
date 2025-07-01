@@ -8,6 +8,19 @@ module Arceus
     """
     abstract type TraitPool end
 
+    const KEYWORDS = Dict{Symbol, Symbol}(
+        :position => :at,
+        :add => :+,
+        :remove => :-,
+        :dependance => :depends,
+        :parent => :<=,
+        :to => :(=>),
+        :from => :from,
+        :magic_mode => :magic,
+        :pext_mode => :pext,
+    )
+
+    include("llvm_op.jl")
     include("magic_cache.jl")
     include("magic_bitboard.jl")
     include("bits_allocation.jl") 
