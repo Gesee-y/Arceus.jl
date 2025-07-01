@@ -99,11 +99,11 @@ end
 
 #You can modify and copy trait pools.
 
-@copy_traitpool Pokemon Pokemon2
-@copy_traitpool Pokemon Pokemon3
-@copy_traitpool Pokemon Pokemon4
-@make_traitpool "ABCDEF" X
-@copy_traitpool Pokemon X
+@copy_traitpool Pokemon => Pokemon2
+@copy_traitpool Pokemon => Pokemon3
+@copy_traitpool Pokemon => Pokemon4
+@make_traitpool X from "ABCDEF"
+@copy_traitpool Pokemon => X
 # You can use copy_traitpool to existing trait pools too.
 
 @settraits Pokemon2 begin
