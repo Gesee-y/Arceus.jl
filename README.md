@@ -135,7 +135,7 @@ At 60 FPS, even the slowest path allows **50,000+ lookups/frame**, and magic num
 ## ⚠️ Known Limitations
 
 * **Magic number generation** is compute-intensive the first time but is cached afterward.
-* **No dynamic function generation**, which avoids memory leaks tied to Julia’s compilation model.
+* **Limited to 64 traits** due to the use of UInt64 for encoding traits
 
 ---
 
