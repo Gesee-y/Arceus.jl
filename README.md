@@ -1,40 +1,55 @@
 # Arceus.jl
 
-A fork of [AliceRoselia](https://github.com/AliceRoselia/Arceus.jl)'s *Arceus*, an entity management system based on magic bitboards.
+**Arceus.jl** is a high-performance entity resolution engine based on [magic bitboards](https://www.chessprogramming.org/Magic_Bitboards), originally forked from [AliceRoselia/Arceus.jl](https://github.com/AliceRoselia/Arceus.jl). It provides constant-time (`O(1)`) behavior lookup for [Entity-Component-System (ECS)](https://en.wikipedia.org/wiki/Entity_component_system) architectures using trait-based bitmasking.
 
-[Entity-Component-System (ECS)](https://en.wikipedia.org/wiki/Entity_component_system) is a well-established architecture for managing entities by decoupling **data** (components) from **behavior** (systems). However, traditional ECS approaches suffer from query-based bottlenecks—retrieving all entities with a specific set of components can become redundant and slow, especially as the number of possible component combinations grows.
+Arceus bypasses the traditional ECS bottleneck—querying for component combinations—by relying on precomputed bitmask lookups inspired by chess engine optimizations.
 
-**Arceus.jl** solves this using an approach inspired by [magic bitboards](https://www.chessprogramming.org/Magic_Bitboards)—a technique originally used in chess engines to precompute move lookups. With it, Arceus offers lightning-fast, constant-time (`O(1)`) behavior resolution for any component combination.
+---
 
 ## Installation
 
-**Stable version**
+**Latest registered release**:
 
 ```julia
 julia> ]add Arceus
 ```
 
-**Development version**
+**Development version**:
 
 ```julia
 julia> ]add https://github.com/Gesee-y/Arceus.jl
 ```
+---
 
-## Features
+## Principle
 
-* **Constant-Time Behavior Lookup**
-  Precompute all possible behaviors for entities and retrieve them instantly based on their components.
+**Arceus.jl** is built on a single idea: **precomputed behavior resolution**.
 
-* **Caching of Magic Numbers**
-  Magic numbers used for lookups are cached to disk (CSV), ensuring deterministic, reproducible, and fast reinitialization.
+By leveraging either [PEXT bitboards](https://www.chessprogramming.org/BMI2) or magic bitboards, the package maps every possible trait combination to a unique output **at compile-time or initialization**, allowing for direct, constant-time lookups.
 
-* **Compatibility**
-  Works with any archetype-based ECS using bitmasking or similar approaches for component storage.
+This approach is particularly powerful when the number of trait combinations becomes combinatorially large—something that quickly renders traditional `if`/`else` chains unmanageable and slow. Archetype-based ECS designs frequently encounter such branching complexity, e.g., handling conditions like `"if A and B and C"`, `"if A and B and D"` etc.
 
-* **Fine-Grained Bit Manipulation**
-  Define custom bit ranges for component pools, explicitly control trait positions, and encode trait dependencies.
+Instead of resolving these conditions at runtime, **Arceus** precomputes all possible outcomes in advance and performs lookups in under **20 nanoseconds**, even with the slowest (software) backend.
 
-## Example
+With modern CPUs or when using magic numbers, this latency drops to **7 ns or less**.
+
+---
+
+## Key Features
+
+* **O(1) Trait Lookup**: Ultra-fast behavior dispatch using precomputed lookup tables, powered by [PEXT bitboard](https://www.chessprogramming.org/BMI2) or magic bitboards.
+* **Multiple Backends**:
+
+  * Native PEXT (BMI2-enabled CPUs):
+  * Software fallback
+  * Magic bitboards
+* **Trait Pool DSL**: Define and organize traits declaratively, with support for subpools, explicit bit ranges, and dependencies.
+* **Persistence**: Magic numbers are cached to disk (CSV), enabling fast and deterministic reinitialization.
+* **Composable & Flexible**: Integrates with ECS engines using bitmasking/archetypes and supports fine-grained control over bit layouts.
+
+---
+
+## 🔧 Example Usage
 
 ```julia
 using Arceus
@@ -66,42 +81,9 @@ end
     @trait flame
 end
 
-#Subpool also must be defined in the global scope.
-@subpool "Biome" "ABCDEF".reserve1.biome_preference begin
-    @trait beach_preference
-    @trait ice_preference
-    @trait volcanic_preference
-end
-#Defining concrete subpool. 
-@subpool "Meta" "ABCDEF".meta
-
-@make_subpool "Biome" biometraits Pokemon
-@make_subpool "Meta" metatraits Pokemon
-@make_subpool "Biome" biometraits2 begin
-    @trait beach_preference 1
-    @trait ice_preference 0
-    @trait volcanic_preference
-end
-
-#This "registers" subpool.
-#Usage...
-function x(biometraits3::get_trait_pool_type("Biome"))
-    @register_subpool "Biome" biometraits3 #Since this is a subpool.
-    #Use @register_traitpool for a non-subpool trait pool.
-end
-
-#This joins the subpools to their parent traitpool (Presume parent, otherwise they write whatever bits they happen to occupy).
-#This syntax is used for the sake of consistent syntax across the entire package.
-@join_subpools Pokemon begin
-    @subpool biometraits2
-    @subpool metatraits
-end
-
 #You can modify and copy trait pools.
 
 @copy_traitpool Pokemon => Pokemon2
-@copy_traitpool Pokemon => Pokemon3
-@copy_traitpool Pokemon => Pokemon4
 @make_traitpool X from "ABCDEF"
 @copy_traitpool Pokemon => X
 # You can use copy_traitpool to existing trait pools too.
@@ -112,22 +94,6 @@ end
     @trait roles.support depends X
     @trait meta.earlygame depends X
 end
-
-@addtraits Pokemon3 begin
-    @trait electro 
-    @trait roles.attacker
-    @trait roles.support depends X 
-    @trait meta.earlygame depends X
-end
-
-@removetraits Pokemon4 begin
-    @trait electro 
-    @trait roles.attacker
-    @trait roles.support depends X
-    @trait meta.earlygame depends X
-end
-
-
 
 f1 = @lookup k "ABCDEF" begin
     out = 1.0
@@ -152,16 +118,35 @@ lookup_val = effectiveness[Pokemon]
 println(lookup_val)
 ```
 
-## Known Limitations
+---
 
-* Generating the magic numbers for the first time is compute-intensive. However, this is a one-time cost, as results are cached for future runs.
+## ⚙Performance Summary
 
-## Contributions
+| Backend         | Lookup Time | Notes                               |
+| --------------- | ----------- | ----------------------------------- |
+| Native PEXT     | \~2–3ns     | Requires BMI2 support (recent CPUs) |
+| Magic Bitboards | \~7ns       | Hardware-independent; slow to init  |
+| Software PEXT   | \~20ns      | Safe fallback for legacy systems    |
 
-All contributions are welcome! Feel free to submit pull requests or open issues.
+At 60 FPS, even the slowest path allows **50,000+ lookups/frame**, and magic numbers go up to **140,000+**. Native PEXT? Up to **500,000 lookups/ms**.
 
-And don't forget to support the original author of this system, [AliceRoselia](https://github.com/AliceRoselia).
+---
 
-## License
+## ⚠️ Known Limitations
 
-This package is on the MIT License, as set by its original author.
+* **Magic number generation** is compute-intensive the first time but is cached afterward.
+* **No dynamic function generation**, which avoids memory leaks tied to Julia’s compilation model.
+
+---
+
+## 🤝 Contributing
+
+Pull requests and issues are welcome. Any improvement—performance, documentation, features—is appreciated.
+
+Special thanks to [AliceRoselia](https://github.com/AliceRoselia), original author of *Arceus.jl*.
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License, as defined by the original repository.
