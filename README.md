@@ -49,7 +49,7 @@ With modern CPUs or when using magic numbers, this latency drops to **7 ns or le
 
 ---
 
-## 🔧 Example Usage
+## Example Usage
 
 ```julia
 using Arceus
@@ -120,7 +120,7 @@ println(lookup_val)
 
 ---
 
-## ⚙Performance Summary
+## Performance Summary
 
 | Backend         | Lookup Time | Notes                               |
 | --------------- | ----------- | ----------------------------------- |
@@ -128,18 +128,18 @@ println(lookup_val)
 | Magic Bitboards | \~7ns       | Hardware-independent; slow to init  |
 | Software PEXT   | \~20ns      | Safe fallback for legacy systems    |
 
-At 60 FPS, even the slowest path allows **50,000+ lookups/frame**, and magic numbers go up to **140,000+**. Native PEXT? Up to **500,000 lookups/ms**.
+At 60 FPS, even the slowest path allows **50,000+ lookups/ms**, and magic numbers go up to **140,000+**. Native PEXT? Up to **500,000 lookups/ms**.
 
 ---
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 * **Magic number generation** is compute-intensive the first time but is cached afterward.
 * **Limited to 64 traits** due to the use of UInt64 for encoding traits
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Pull requests and issues are welcome. Any improvement—performance, documentation, features—is appreciated.
 
@@ -147,6 +147,6 @@ Special thanks to [AliceRoselia](https://github.com/AliceRoselia), original auth
 
 ---
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License, as defined by the original repository.
