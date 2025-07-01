@@ -1,30 +1,34 @@
 #This is a testable documentation showing all the features.
 
-using Arceus
+include("..\\src\\Arceus.jl")
+
+using .Arceus
+using BenchmarkTools
+
 #Traitpool must be defined at compile time.
 println("Checkpoint!")
 
 @traitpool "ABCDEF" begin
     @trait electro
     @trait flame #Defining trait without bits.
-    @trait laser 2 #Defining trait with a specified bit (from the right or least significant.)
+    @trait laser at 2 #Defining trait with a specified bit (from the right or least significant.)
     @subpool roles begin
         @trait attacker
         @trait support
         
     end
-    @subpool meta 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
+    @subpool meta at 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
         @trait earlygame
         @trait midgame
         @trait lategame
     end
-    @abstract_subpool reserve1 33-48 #Defining start and finish bits.
-    @abstract_subpool reserve2 8 #Defining the size, but not the sub_trait.
+    @abstract_subpool reserve1 at 33-48 #Defining start and finish bits.
+    @abstract_subpool reserve2 at 8 #Defining the size, but not the sub_trait.
 end
 println("Checkpoint2!")
 
 #This will register the variable at compile time and construct a trait pool at runtime.
-@make_traitpool "ABCDEF" Pokemon begin
+@make_traitpool Pokemon from "ABCDEF" begin
     @trait electro #Creating trait pool with the following traits.
     @trait flame
 end
@@ -79,32 +83,32 @@ end
 #You can modify and copy trait pools.
 
 #copying needs its own macro too.
-@copy_traitpool Pokemon Pokemon2
-@copy_traitpool Pokemon Pokemon3
-@copy_traitpool Pokemon Pokemon4
-@make_traitpool "ABCDEF" X
-@copy_traitpool Pokemon X
+@copy_traitpool Pokemon => Pokemon2
+@copy_traitpool Pokemon => Pokemon3
+@copy_traitpool Pokemon => Pokemon4
+@make_traitpool X from "ABCDEF"
+@copy_traitpool Pokemon => X
 #You can use copy_traitpool to existing trait pools too.
 
 @settraits Pokemon2 begin
-    @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait +electro 
+    @trait +roles.attacker
+    @trait roles.support depends X
+    @trait meta.earlygame depends X
 end
 
 @addtraits Pokemon3 begin
     @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait roles.attacker
+    @trait roles.support depends X
+    @trait meta.earlygame depends X
 end
 
 @removetraits Pokemon4 begin
     @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait roles.attacker
+    @trait roles.support depends X
+    @trait meta.earlygame depends X
 end
 
 
@@ -126,9 +130,10 @@ println(f1)
 #If the variable is not registered, it is not seen in the module, the result is error finding variable of that name.
 @register_variable f1
 #Making lookup.
-println(@macroexpand @make_lookup f1 x_arr)
+println(@macroexpand @make_lookup f1)
 #We then can finally make the lookup function.
-@make_lookup f1 x_arr
-lookup_val = @get_lookup_value x_arr Pokemon
+x_arr = @make_lookup f1
+@btime lookup_val = $x_arr[$Pokemon]
+lookup_val = x_arr[Pokemon]
 
 println(lookup_val)
