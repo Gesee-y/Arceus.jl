@@ -34,19 +34,19 @@ Define a new trait pool with the given name. In the begin block, you should defi
 @traitpool "ABCDEF" begin
     @trait electro # Create a trait with a dynamic position
     @trait flame
-    @trait laser 2 # Define a trait with a fixed position ( the 2nd bit)
+    @trait laser at 2 # Define a trait with a fixed position ( the 2nd bit)
     @subpool roles begin # a new subpool with a dynamic position. This one will take 2 bits
         @trait attacker
         @trait support
         
     end
-    @subpool meta 16-32 begin # a new pool with a fixed size and position
+    @subpool meta at 16-32 begin # a new pool with a fixed size and position
         @trait earlygame
         @trait midgame
         @trait lategame
     end
-    @abstract_subpool reserve1 33-48 # Abstract pool with undefined traits, going from 33 to 48
-    @abstract_subpool reserve2 8 # this one just have a size of 8 bits, no fixed position
+    @abstract_subpool reserve1 at 33-48 # Abstract pool with undefined traits, going from 33 to 48
+    @abstract_subpool reserve2 at 8 # this one just have a size of 8 bits, no fixed position
 end
 ```
 """
@@ -86,19 +86,19 @@ which will contains the pool traits and subpools defined in the begin block
 @traitpool "ABCDEF" begin
     @trait electro
     @trait flame #Defining trait without bits.
-    @trait laser 2 #Defining trait with a specified bit (from the right or least significant.)
+    @trait laser at 2 #Defining trait with a specified bit (from the right or least significant.)
     @subpool roles begin
         @trait attacker
         @trait support
         
     end
-    @subpool meta 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
+    @subpool meta at 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
         @trait earlygame
         @trait midgame
         @trait lategame
     end
-    @abstract_subpool reserve1 33-48 #Defining start and finish bits.
-    @abstract_subpool reserve2 8 #Defining the size, but not the sub_trait.
+    @abstract_subpool reserve1 at 33-48 #Defining start and finish bits.
+    @abstract_subpool reserve2 at 8 #Defining the size, but not the sub_trait.
 end
 
 #This will register the variable at compile time and construct a trait pool at runtime.
@@ -108,20 +108,28 @@ end
 end
 ```
 """
-macro make_traitpool(traitpool, variable)
-    var_quot = Meta.quot(variable)
-    traitpool_struct = TRAIT_POOL_NAMES[traitpool]
-    module_name = @__MODULE__
-    eval(:(($module_name).TRAIT_POOL_TYPES[$var_quot] = $traitpool_struct))
-    return esc(:($variable = $traitpool_struct(0)))
-end
-macro make_traitpool(traitpool,variable,traits_set)
-    ans = quote
-        @make_traitpool $traitpool $variable
-        @addtraits $variable $traits_set
-        
+macro make_traitpool(variable, word, traitpool)
+    if word == KEYWORDS[:from]
+        var_quot = Meta.quot(variable)
+        traitpool_struct = TRAIT_POOL_NAMES[traitpool]
+        module_name = @__MODULE__
+        eval(:(($module_name).TRAIT_POOL_TYPES[$var_quot] = $traitpool_struct))
+        return esc(:($variable = $traitpool_struct(0)))
+    else
+        error("Invalid syntax. Got $ex.\nExpected @make_traitpool traitpool from var_name.")
     end
-    return esc(ans)
+end
+macro make_traitpool(variable,word,traitpool,traits_set)
+    if word == KEYWORDS[:from]
+        ans = quote
+            @make_traitpool $variable from $traitpool
+            @addtraits $variable $traits_set
+            
+        end
+        return esc(ans)
+    else
+        error("Invalid syntax. Got $ex.\nExpected @make_traitpool traitpool from var_name begin ... end.")
+    end
 end
 
 """
@@ -139,20 +147,21 @@ macro register_traitpool(traitpool, variable)
 end
 
 """
-    @copy_traitpool var1 var2
+    @copy_traitpool var1 => var2
 
 Copy the `var1`'s traits pool to the `var2` and register it
 """
-macro copy_traitpool(variable1, variable2)
+macro copy_traitpool(expr)
     module_name = @__MODULE__
-    traitpool_struct = TRAIT_POOL_TYPES[variable1]
-    var_quot = Meta.quot(variable2)
-    eval(:(($module_name).TRAIT_POOL_TYPES[$var_quot] = $traitpool_struct))
-    return esc(:($variable2 = $variable1))
+    if expr.args[1] == KEYWORDS[:to]
+        variable1, variable2 = expr.args[2], expr.args[3]
+        traitpool_struct = TRAIT_POOL_TYPES[variable1]
+        var_quot = Meta.quot(variable2)
+        eval(:(($module_name).TRAIT_POOL_TYPES[$var_quot] = $traitpool_struct))
+        return esc(:($variable2 = $variable1))
+    else
+        error("Invalid syntax. Got $ex.\nExpected @copy_traitpool var1 => var2")
+    end
 end
 
 #End of part 1... defining traits.
-
-
-
-

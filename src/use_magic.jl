@@ -109,26 +109,6 @@ macro get_lookup_function(var, parent_pool, rule)
     #println(rule_function)
     return esc(ans)
 end
-#=
-macro get_lookup_function_2(var, parent_pool, rule)
-    #Create a new struct type. 
-    #Lookup is a string...
-    x = gensym()
-    f1 = gensym()
-    f2 = gensym()
-    replace_property!(rule,var,x)
-    #println(var)
-    rule_function = :(const $f1 = $x->$rule)
-    parent_pool_type = get_trait_pool_type(parent_pool)
-    println("parent_pool: ", parent_pool_type)
-    get_f2 = :($f2 = $x -> $f1($parent_pool_type($x)))
-    eval(:(@register_traitpool $parent_pool $x;))
-    ans = :($rule_function; $get_f2; $f2)
-    #println(rule_function)
-    return esc(ans)
-end
-=#
-
 
 function get_lookup_constants(m::magic_constructor)
     

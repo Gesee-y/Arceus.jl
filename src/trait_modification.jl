@@ -40,7 +40,7 @@ function get_trait_pool_type(name)
 end
 
 # This will create the expressions chain on which we will iterate
-function parse_walk_chain(chain::Symbol)
+function parse_walk_chain(chain::Union{QuoteNode,Symbol})
     return [chain]
 end
 function parse_walk_chain(chain::Expr)
@@ -49,10 +49,39 @@ function parse_walk_chain(chain::Expr)
 end
 
 # This seems to return the a parsed walking chain and the size of a trait
-function parse_individual_trait_mod_arg(x)
+function parse_individual_trait_mod_arg(x,::Val{true})
+    @assert x.head == :macrocall && x.args[1] == Symbol("@trait")
+    value = 1
+    to_walk = x.args[2]
+    if length(x.args) > 2
+        if x.args[3] == KEYWORDS[:dependance]
+            value = x_args[4]
+            to_walk = x.args[2]
+        end
+    end
+    walking_chain = parse_walk_chain(to_walk)
+    return (walking_chain,value)
+end
+function parse_individual_trait_mod_arg(x, ::Val{false})
     @assert (x.head == :macrocall && x.args[1] == Symbol("@trait")) "Invalid argument $x"
-    walking_chain = parse_walk_chain(x.args[2])
-    value = length(x.args) >= 3 ? x.args[3] : 1
+    x_args = x.args[2].args
+    to_walk = x_args[2]
+    value = nothing
+    
+    # Checking what to do.
+    if x_args[1] == KEYWORDS[:add]
+        value = 1
+    elseif x_args[1] == KEYWORDS[:remove]
+        value = 0
+    elseif length(x.args) > 2
+        if x.args[3] == KEYWORDS[:dependance]
+            value = x_args[4]
+            to_walk = x.args[2]
+        end
+    else
+        error("Invalid syntax. Got $x.\nUse + to add ,- to remove and depend for dependances")
+    end
+    walking_chain = parse_walk_chain(to_walk)
     return (walking_chain,value)
 end
 
@@ -62,10 +91,11 @@ struct traitsArguments
     setdepending::Dict{Symbol,Vector{Vector{Symbol}}}
 end
 
-function parse_traits_mod_args(args)
+function parse_traits_mod_args(args, b=true)
     remove_line_number_node!(args)
     @assert args.head == :block "Invalid trait modification args. $args should be a block"
-    result = [parse_individual_trait_mod_arg(i) for i in args.args]
+    v = Val(b)
+    result = [parse_individual_trait_mod_arg(i,v) for i in args.args]
     Ones = [i[1] for i in result if i[2] == 1]
     Zeros =  [i[1] for i in result if i[2] == 0]
     Depending = Dict{Symbol,Vector{Vector{Symbol}}}()
@@ -108,33 +138,33 @@ A var name means "set this trait the same as this var"
 @traitpool "ABCDEF" begin
     @trait electro
     @trait flame
-    @trait laser 2
+    @trait laser at 2
     @subpool roles begin
         @trait attacker
         @trait support
         
     end
-    @subpool meta 16-32 begin
+    @subpool meta at 16-32 begin
         @trait earlygame
         @trait midgame
         @trait lategame
     end
-    @abstract_subpool reserve1 33-48
-    @abstract_subpool reserve2 8
+    @abstract_subpool reserve1 at 33-48
+    @abstract_subpool reserve2 at 8
 end
 
-@make_traitpool "ABCDEF" Pokemon begin
+@make_traitpool Pokemon from "ABCDEF" begin
     @trait electro
     @trait flame
 end
 
-@copy_traitpool Pokemon X
+@copy_traitpool Pokemon => X
 
 @settraits Pokemon begin
-    @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait -electro 
+    @trait +roles.attacker
+    @trait roles.support depends X
+    @trait meta.earlygame depends X
 end
 ```
 """
@@ -144,7 +174,7 @@ macro settraits(variable,args)
     trait_pool_descriptor = get_trait_pool_descriptor(variable)
 
     # And then we parse the arguments (mostly a set of traits)
-    parsed_args = parse_traits_mod_args(args)
+    parsed_args = parse_traits_mod_args(args, false)
     
     # We get all the traits needing to be set to 
     static_one_bits = [walk_trait_pool_descriptor(i,trait_pool_descriptor) for i in parsed_args.settoones]

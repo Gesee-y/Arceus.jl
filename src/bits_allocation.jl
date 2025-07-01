@@ -1,3 +1,13 @@
+
+const KEYWORDS = Dict{Symbol, Symbol}(
+    :position => :at,
+    :add => :+,
+    :remove => :-,
+    :dependance => :<=,
+    :to => :(=>),
+    :from => :from,
+)
+
 """
     mutable struct PoolDescriptor
 
@@ -153,27 +163,35 @@ function parsed_trait_args(x)
     if (x.args[1]) == Symbol("@trait")
         if (length(x.args) == 2)
             return TraitInformation(x.args[2])
+        elseif x.args[3] == KEYWORDS[:position]
+            return FixedPosTraitInformation(x.args[2],x.args[4])
         else
-            return FixedPosTraitInformation(x.args[2],x.args[3])
+            error("Invalid syntax. Got : $x.\nExpected @trait name or @trait name at bit_pos")
         end
     # If we are creating a subpool
     elseif (x.args[1]) == Symbol("@subpool")
-        if (x.args[3].head == :block) # If we got a block of data (traits or subpools)
+        if (x.args[3] isa Expr) # If we got a block of data (traits or subpools)
             parsed_subpool = parse_traits_first_step(x.args[3]) # We do a little adjustment
             return SubPoolInformation(x.args[2],parsed_subpool)
-        else # It means the size of the pool was specified, we are creating a fixed size subpool
-            Temp = x.args[3] 
+        elseif x.args[3] == KEYWORDS[:position] # It means the size of the pool was specified, we are creating a fixed size subpool
+            Temp = x.args[4] 
             @assert ((Temp.head == :call) && (Temp.args[1] == :(-))) "Invalid argument in @subpool declaration: $Temp"
-            parsed_subpool = parse_traits_first_step(x.args[4])
+            parsed_subpool = parse_traits_first_step(x.args[5])
             return FixedPosSubPoolInformation(x.args[2],Temp.args[2],Temp.args[3],parsed_subpool)
+        else
+            error("Invalid syntax. Got $x.\nExpected @subpool name begin ... end or @subpool name at pos begin ... end")
         end
     elseif (x.args[1]) == Symbol("@abstract_subpool") # Last possibility, we are creating an abstract sub pool
-        if (x.args[3] isa Expr)
-            Temp = x.args[3]
-            @assert ((Temp.head == :call) && (Temp.args[1] == :(-))) "Invalid argument in @subpool declaration: $Temp"
-            return FixedPosAbstractSubPoolInformation(x.args[2],Temp.args[2],Temp.args[3])
-        else 
-            return AbstractSubPoolInformation(x.args[2],x.args[3])
+        if x.args[3] == KEYWORDS[:position]
+            if (x.args[4] isa Expr)
+                Temp = x.args[4]
+                @assert ((Temp.head == :call) && (Temp.args[1] == :(-))) "Invalid argument in @subpool declaration: $Temp"
+                return FixedPosAbstractSubPoolInformation(x.args[2],Temp.args[2],Temp.args[3])
+            else 
+                return AbstractSubPoolInformation(x.args[2],x.args[4])
+            end
+        else
+            error("Invalid syntax. Got $x.\nExpected @abstract_subpool name at pos.")
         end
     end
 end
