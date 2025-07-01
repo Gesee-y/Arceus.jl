@@ -45,23 +45,23 @@ println("Checkpoint!")
 @traitpool "ABCDEF" begin
     @trait electro
     @trait flame #Defining trait without bits.
-    @trait laser 2 #Defining trait with a specified bit (from the right or least significant.)
+    @trait laser at 2 #Defining trait with a specified bit (from the right or least significant.)
     @subpool roles begin
         @trait attacker
         @trait support
         
     end
-    @subpool meta 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
+    @subpool meta at 16-32 begin #Subpool can be defined with a specified number of bits, but for a concrete subpool, the number of bits can be defined.
         @trait earlygame
         @trait midgame
         @trait lategame
     end
-    @abstract_subpool reserve1 33-48 #Defining start and finish bits.
-    @abstract_subpool reserve2 8 #Defining the size, but not the sub_trait.
+    @abstract_subpool reserve1 at 33-48 #Defining start and finish bits.
+    @abstract_subpool reserve2 at 8 #Defining the size, but not the sub_trait.
 end
 
 #This will register the variable at compile time and construct a trait pool at runtime.
-@make_traitpool "ABCDEF" Pokemon begin
+@make_traitpool Pokemon from "ABCDEF" begin
     @trait electro #Creating trait pool with the following traits.
     @trait flame
 end
@@ -104,27 +104,27 @@ end
 @copy_traitpool Pokemon Pokemon4
 @make_traitpool "ABCDEF" X
 @copy_traitpool Pokemon X
-#You can use copy_traitpool to existing trait pools too.
+# You can use copy_traitpool to existing trait pools too.
 
 @settraits Pokemon2 begin
-    @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait -electro 
+    @trait +roles.attacker
+    @trait roles.support depends X
+    @trait meta.earlygame depends X
 end
 
 @addtraits Pokemon3 begin
     @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait roles.attacker
+    @trait roles.support depends X 
+    @trait meta.earlygame depends X
 end
 
 @removetraits Pokemon4 begin
     @trait electro 
-    @trait roles.attacker 1
-    @trait roles.support X
-    @trait meta.earlygame X
+    @trait roles.attacker
+    @trait roles.support depends X
+    @trait meta.earlygame depends X
 end
 
 
